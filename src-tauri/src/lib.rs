@@ -17,6 +17,7 @@ pub fn run() {
     let db_state = Mutex::new(db);
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(db_state)
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -71,6 +72,27 @@ pub fn run() {
                     app_handle.emit("clipboard-changed", id).ok();
                 }
             })).ok();
+
+            // 注册全局快捷键
+            let shortcut = if cfg!(target_os = "macos") {
+                "CommandOrControl+Shift+V"
+            } else {
+                "Control+Shift+V"
+            };
+
+            let app_handle_shortcut = app.handle().clone();
+            app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, _event| {
+                if let Some(window) = app_handle_shortcut.get_webview_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        window.hide().ok();
+                    } else {
+                        window.show().ok();
+                        window.set_focus().ok();
+                    }
+                }
+            }).ok();
+
+            app.global_shortcut().register(tauri_plugin_global_shortcut::Shortcut::new(shortcut, None)).ok();
 
             Ok(())
         })
