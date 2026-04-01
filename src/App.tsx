@@ -1,51 +1,99 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { observer } from 'mobx-react-lite';
+import { clipboardStore } from './stores/ClipboardStore';
+import { useState } from 'react';
+import './styles.css';
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+const App = observer(() => {
+  const [searchInput, setSearchInput] = useState('');
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchInput(e.target.value);
+    clipboardStore.setSearch(e.target.value);
+  };
+
+  const handleFilterChange = (type: any) => {
+    clipboardStore.setFilter(type);
+  };
+
+  const handleItemClick = async (id: number) => {
+    await clipboardStore.pasteItem(id);
+  };
+
+  const handleDelete = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await clipboardStore.deleteItem(id);
+  };
+
+  const handleTogglePin = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await clipboardStore.togglePin(id);
+  };
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
+    <div className="h-screen bg-gray-100 flex flex-col">
+      <div className="p-4 bg-white shadow">
         <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
+          type="text"
+          placeholder="搜索剪切板..."
+          value={searchInput}
+          onChange={handleSearch}
+          className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      </div>
+
+      <div className="flex gap-2 p-4 bg-white border-b">
+        {['all', 'text', 'image', 'file_path'].map(type => (
+          <button
+            key={type}
+            onClick={() => handleFilterChange(type)}
+            className={`px-4 py-2 rounded ${
+              clipboardStore.filterType === type
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-200 text-gray-700'
+            }`}
+          >
+            {type === 'all' ? '全部' : type === 'text' ? '文本' : type === 'image' ? '图片' : '文件'}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4">
+        {clipboardStore.filteredItems.map(item => (
+          <div
+            key={item.id}
+            onClick={() => handleItemClick(item.id)}
+            className="bg-white p-4 mb-2 rounded-lg shadow hover:shadow-md cursor-pointer transition"
+          >
+            <div className="flex justify-between items-start">
+              <div className="flex-1">
+                <p className="text-sm text-gray-600 mb-1">
+                  {new Date(item.createdAt).toLocaleString()}
+                </p>
+                <p className="text-gray-800 break-words">{item.preview}</p>
+              </div>
+              <div className="flex gap-2 ml-4">
+                <button
+                  onClick={(e) => handleTogglePin(item.id, e)}
+                  className={`px-2 py-1 rounded ${
+                    item.pinned ? 'bg-yellow-400' : 'bg-gray-200'
+                  }`}
+                >
+                  📌
+                </button>
+                <button
+                  onClick={(e) => handleDelete(item.id, e)}
+                  className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                >
+                  🗑️
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
-}
+});
 
 export default App;
+
