@@ -1,10 +1,10 @@
 use crate::storage::{models::ClipboardItem, Database};
 use tauri::State;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 #[tauri::command]
 pub fn get_clipboard_items(
-    db: State<Mutex<Database>>,
+    db: State<Arc<Mutex<Database>>>,
     limit: u32,
     offset: u32,
     search: Option<String>,
@@ -16,7 +16,7 @@ pub fn get_clipboard_items(
 
 #[tauri::command]
 pub fn delete_clipboard_item(
-    db: State<Mutex<Database>>,
+    db: State<Arc<Mutex<Database>>>,
     id: i64,
 ) -> Result<(), String> {
     let db = db.lock().unwrap();
@@ -25,7 +25,7 @@ pub fn delete_clipboard_item(
 
 #[tauri::command]
 pub fn toggle_pin(
-    db: State<Mutex<Database>>,
+    db: State<Arc<Mutex<Database>>>,
     id: i64,
 ) -> Result<(), String> {
     let db = db.lock().unwrap();
@@ -34,7 +34,7 @@ pub fn toggle_pin(
 
 #[tauri::command]
 pub fn paste_item(
-    db: State<Mutex<Database>>,
+    db: State<Arc<Mutex<Database>>>,
     id: i64,
 ) -> Result<(), String> {
     use arboard::Clipboard;

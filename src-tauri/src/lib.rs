@@ -4,8 +4,9 @@ mod storage;
 
 use clipboard::{create_monitor, ClipboardContent};
 use storage::{models::ClipboardItem, Database};
-use std::sync::Mutex;
-use tauri::Manager;
+use std::sync::{Arc, Mutex};
+use tauri::{Emitter, Manager};
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -14,19 +15,19 @@ pub fn run() {
     let db_path = app_data_dir.join("clipboard.db");
 
     let db = Database::new(db_path).expect("Failed to initialize database");
-    let db_state = Mutex::new(db);
+    let db_state = Arc::new(Mutex::new(db));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .manage(db_state)
-        .setup(|app| {
+        .manage(db_state.clone())
+        .setup(move |app| {
             let app_handle = app.handle().clone();
-            let db = app.state::<Mutex<Database>>();
+            let db_clone = db_state.clone();
 
             let mut monitor = create_monitor();
 
             monitor.start(Box::new(move |content| {
-                let db = db.lock().unwrap();
+                let db = db_clone.lock().unwrap();
 
                 let item = match content {
                     ClipboardContent::Text(text) => {
@@ -74,11 +75,13 @@ pub fn run() {
             })).ok();
 
             // 注册全局快捷键
-            let shortcut = if cfg!(target_os = "macos") {
+            let shortcut_str = if cfg!(target_os = "macos") {
                 "CommandOrControl+Shift+V"
             } else {
                 "Control+Shift+V"
             };
+
+            let shortcut: tauri_plugin_global_shortcut::Shortcut = shortcut_str.parse().unwrap();
 
             let app_handle_shortcut = app.handle().clone();
             app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, _event| {
@@ -91,8 +94,6 @@ pub fn run() {
                     }
                 }
             }).ok();
-
-            app.global_shortcut().register(tauri_plugin_global_shortcut::Shortcut::new(shortcut, None)).ok();
 
             Ok(())
         })
