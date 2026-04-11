@@ -28,6 +28,7 @@ arboard = "3.3"
 tokio = { version = "1", features = ["full"] }
 sha2 = "0.10"
 chrono = "0.4"
+enigo = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.52", features = [

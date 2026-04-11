@@ -35,9 +35,12 @@ pub fn toggle_pin(
 #[tauri::command]
 pub fn paste_item(
     db: State<Arc<Mutex<Database>>>,
+    app: tauri::AppHandle,
     id: i64,
 ) -> Result<(), String> {
     use arboard::Clipboard;
+    use enigo::{Enigo, Keyboard, Key, Settings, Direction};
+    use tauri::Manager;
 
     let db = db.lock().unwrap();
     let items = db.get_items(1000, 0, None, None).map_err(|e| e.to_string())?;
@@ -47,6 +50,26 @@ pub fn paste_item(
 
         if let Some(text) = item.text_content {
             clipboard.set_text(text).map_err(|e| e.to_string())?;
+        }
+
+        // 隐藏窗口，让之前的应用获得焦点
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
+
+        // 等待窗口隐藏、焦点切换
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        // 模拟 Cmd+V / Ctrl+V 粘贴
+        let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
+        if cfg!(target_os = "macos") {
+            enigo.key(Key::Meta, Direction::Press).ok();
+            enigo.key(Key::Unicode('v'), Direction::Click).ok();
+            enigo.key(Key::Meta, Direction::Release).ok();
+        } else {
+            enigo.key(Key::Control, Direction::Press).ok();
+            enigo.key(Key::Unicode('v'), Direction::Click).ok();
+            enigo.key(Key::Control, Direction::Release).ok();
         }
 
         Ok(())
