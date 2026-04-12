@@ -84,13 +84,15 @@ pub fn run() {
             let shortcut: tauri_plugin_global_shortcut::Shortcut = shortcut_str.parse().unwrap();
 
             let app_handle_shortcut = app.handle().clone();
-            app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, _event| {
-                if let Some(window) = app_handle_shortcut.get_webview_window("main") {
-                    if window.is_visible().unwrap_or(false) {
-                        window.hide().ok();
-                    } else {
-                        window.show().ok();
-                        window.set_focus().ok();
+            app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+                if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                    if let Some(window) = app_handle_shortcut.get_webview_window("main") {
+                        if window.is_visible().unwrap_or(false) {
+                            window.hide().ok();
+                        } else {
+                            window.show().ok();
+                            window.set_focus().ok();
+                        }
                     }
                 }
             }).ok();
