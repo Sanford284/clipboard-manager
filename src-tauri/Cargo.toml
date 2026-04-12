@@ -38,5 +38,6 @@ windows = { version = "0.52", features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-# cocoa/objc removed - using arboard for clipboard polling instead
+cocoa = "0.25"
+objc = "0.2"
 

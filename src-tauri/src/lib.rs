@@ -8,22 +8,22 @@ use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-/// 记录唤起剪切板窗口之前的前台应用名称，用于粘贴后恢复焦点
+/// 记录唤起剪切板窗口之前的前台应用 bundle id，用于粘贴后恢复焦点
 pub type PreviousApp = Arc<Mutex<Option<String>>>;
 
 #[cfg(target_os = "macos")]
-fn get_frontmost_app() -> Option<String> {
-    use std::process::Command;
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg("tell application \"System Events\" to get name of first application process whose frontmost is true")
-        .output()
-        .ok()?;
-    if output.status.success() {
-        let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !name.is_empty() { Some(name) } else { None }
-    } else {
-        None
+fn get_frontmost_app_bundle_id() -> Option<String> {
+    use cocoa::foundation::NSString;
+    use objc::{msg_send, sel, sel_impl, runtime::Object};
+    use std::ffi::CStr;
+    unsafe {
+        let workspace: *mut Object = msg_send![objc::class!(NSWorkspace), sharedWorkspace];
+        let app: *mut Object = msg_send![workspace, frontmostApplication];
+        if app.is_null() { return None; }
+        let bundle_id: *mut Object = msg_send![app, bundleIdentifier];
+        if bundle_id.is_null() { return None; }
+        let cstr = CStr::from_ptr(bundle_id.UTF8String());
+        Some(cstr.to_string_lossy().into_owned())
     }
 }
 
@@ -116,8 +116,8 @@ pub fn run() {
                             // 记录当前前台应用，以便粘贴后恢复焦点
                             #[cfg(target_os = "macos")]
                             {
-                                if let Some(app_name) = get_frontmost_app() {
-                                    *previous_app_shortcut.lock().unwrap() = Some(app_name);
+                                if let Some(bundle_id) = get_frontmost_app_bundle_id() {
+                                    *previous_app_shortcut.lock().unwrap() = Some(bundle_id);
                                 }
                             }
                             window.show().ok();

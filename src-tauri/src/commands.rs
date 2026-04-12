@@ -81,16 +81,23 @@ pub fn paste_item(
 }
 
 #[cfg(target_os = "macos")]
-fn activate_app(app_name: &str) {
-    use std::process::Command;
-    let script = format!(
-        "tell application \"{}\" to activate",
-        app_name.replace('\\', "\\\\").replace('"', "\\\"")
-    );
-    let _ = Command::new("osascript")
-        .arg("-e")
-        .arg(&script)
-        .output();
+fn activate_app(bundle_id: &str) {
+    use cocoa::base::nil;
+    use cocoa::foundation::NSString;
+    use objc::{msg_send, sel, sel_impl, runtime::Object, class};
+    unsafe {
+        let ns_bundle_id = NSString::alloc(nil).init_str(bundle_id);
+        let running_apps: *mut Object = msg_send![
+            class!(NSRunningApplication),
+            runningApplicationsWithBundleIdentifier: ns_bundle_id
+        ];
+        let count: usize = msg_send![running_apps, count];
+        if count > 0 {
+            let app: *mut Object = msg_send![running_apps, firstObject];
+            // NSApplicationActivateIgnoringOtherApps = 1 << 1 = 2
+            let _: bool = msg_send![app, activateWithOptions: 2usize];
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
