@@ -39,41 +39,45 @@ pub fn paste_item(
     id: i64,
 ) -> Result<(), String> {
     use arboard::Clipboard;
-    use enigo::{Enigo, Keyboard, Key, Settings, Direction};
     use tauri::Manager;
 
-    let db = db.lock().unwrap();
-    let items = db.get_items(1000, 0, None, None).map_err(|e| e.to_string())?;
+    // 先从数据库取出内容，尽快释放锁
+    let text_to_paste = {
+        let db = db.lock().unwrap();
+        let items = db.get_items(1000, 0, None, None).map_err(|e| e.to_string())?;
+        items.into_iter()
+            .find(|i| i.id == id)
+            .and_then(|item| item.text_content)
+    };
 
-    if let Some(item) = items.into_iter().find(|i| i.id == id) {
-        let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
+    let text = text_to_paste.ok_or("Item not found or no text content")?;
 
-        if let Some(text) = item.text_content {
-            clipboard.set_text(text).map_err(|e| e.to_string())?;
-        }
+    // 写入剪切板
+    let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
+    clipboard.set_text(text).map_err(|e| e.to_string())?;
 
-        // 隐藏窗口，让之前的应用获得焦点
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.hide();
-        }
-
-        // 等待窗口隐藏、焦点切换
-        std::thread::sleep(std::time::Duration::from_millis(200));
-
-        // 模拟 Cmd+V / Ctrl+V 粘贴
-        let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
-        if cfg!(target_os = "macos") {
-            enigo.key(Key::Meta, Direction::Press).ok();
-            enigo.key(Key::Unicode('v'), Direction::Click).ok();
-            enigo.key(Key::Meta, Direction::Release).ok();
-        } else {
-            enigo.key(Key::Control, Direction::Press).ok();
-            enigo.key(Key::Unicode('v'), Direction::Click).ok();
-            enigo.key(Key::Control, Direction::Release).ok();
-        }
-
-        Ok(())
-    } else {
-        Err("Item not found".to_string())
+    // 隐藏窗口
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
     }
+
+    // 在新线程中等待焦点切换后模拟粘贴
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        use enigo::{Enigo, Keyboard, Key, Settings, Direction};
+        if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
+            if cfg!(target_os = "macos") {
+                enigo.key(Key::Meta, Direction::Press).ok();
+                enigo.key(Key::Unicode('v'), Direction::Click).ok();
+                enigo.key(Key::Meta, Direction::Release).ok();
+            } else {
+                enigo.key(Key::Control, Direction::Press).ok();
+                enigo.key(Key::Unicode('v'), Direction::Click).ok();
+                enigo.key(Key::Control, Direction::Release).ok();
+            }
+        }
+    });
+
+    Ok(())
 }
