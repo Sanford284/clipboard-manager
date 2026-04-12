@@ -51,35 +51,17 @@ pub fn paste_item(
 
     let text = text_to_paste.ok_or("Item not found or no text content")?;
 
-    // 隐藏窗口
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
-    }
-
-    // 所有剪切板和键盘操作放到后台线程
+    // 写入剪切板
     std::thread::spawn(move || {
-        // 写入剪切板
         if let Ok(mut clipboard) = arboard::Clipboard::new() {
             let _ = clipboard.set_text(text);
         }
-
-        // 等待焦点切换
-        std::thread::sleep(std::time::Duration::from_millis(300));
-
-        // 模拟 Cmd+V
-        use enigo::{Enigo, Keyboard, Key, Settings, Direction};
-        if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
-            if cfg!(target_os = "macos") {
-                enigo.key(Key::Meta, Direction::Press).ok();
-                enigo.key(Key::Unicode('v'), Direction::Click).ok();
-                enigo.key(Key::Meta, Direction::Release).ok();
-            } else {
-                enigo.key(Key::Control, Direction::Press).ok();
-                enigo.key(Key::Unicode('v'), Direction::Click).ok();
-                enigo.key(Key::Control, Direction::Release).ok();
-            }
-        }
     });
+
+    // 隐藏窗口，焦点回到之前的应用，用户直接 Cmd+V 即可
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
 
     Ok(())
 }
