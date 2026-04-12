@@ -68,15 +68,10 @@ pub fn paste_item(
 
     // 后台线程：激活目标应用后模拟粘贴
     std::thread::spawn(move || {
-        // 等待窗口完全隐藏
-        std::thread::sleep(std::time::Duration::from_millis(200));
-
-        // 激活之前的前台应用
+        // 激活之前的前台应用（osascript 是同步阻塞的，返回即表示激活完成）
         #[cfg(target_os = "macos")]
         if let Some(app_name) = &target_app {
             activate_app(app_name);
-            // 等待应用激活完成
-            std::thread::sleep(std::time::Duration::from_millis(200));
         }
 
         simulate_paste();
