@@ -4,15 +4,15 @@ import { listen } from '@tauri-apps/api/event';
 
 export interface ClipboardItem {
   id: number;
-  contentType: string;
-  textContent?: string;
-  htmlContent?: string;
-  blobContent?: number[];
-  filePath?: string;
+  content_type: string;
+  text_content?: string;
+  html_content?: string;
+  blob_content?: number[];
+  file_path?: string;
   preview: string;
-  appSource?: string;
+  app_source?: string;
   pinned: boolean;
-  createdAt: number;
+  created_at: number;
   hash: string;
 }
 
@@ -39,13 +39,13 @@ class ClipboardStore {
   get filteredItems(): ClipboardItem[] {
     return this.items
       .filter(item => {
-        if (this.filterType !== 'all' && item.contentType !== this.filterType) return false;
+        if (this.filterType !== 'all' && item.content_type !== this.filterType) return false;
         if (this.searchQuery && !item.preview.toLowerCase().includes(this.searchQuery.toLowerCase())) return false;
         return true;
       })
       .sort((a, b) => {
         if (a.pinned !== b.pinned) return b.pinned ? 1 : -1;
-        return b.createdAt - a.createdAt;
+        return b.created_at - a.created_at;
       });
   }
 

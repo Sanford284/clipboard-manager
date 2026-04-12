@@ -67,7 +67,7 @@ const App = observer(() => {
             <div className="flex justify-between items-start">
               <div className="flex-1">
                 <p className="text-sm text-gray-600 mb-1">
-                  {new Date(item.createdAt).toLocaleString()}
+                  {new Date(item.created_at).toLocaleString()}
                 </p>
                 <p className="text-gray-800 break-words">{item.preview}</p>
               </div>
