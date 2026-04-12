@@ -38,7 +38,6 @@ pub fn paste_item(
     app: tauri::AppHandle,
     id: i64,
 ) -> Result<(), String> {
-    use arboard::Clipboard;
     use tauri::Manager;
 
     // 先从数据库取出内容，尽快释放锁
@@ -52,19 +51,22 @@ pub fn paste_item(
 
     let text = text_to_paste.ok_or("Item not found or no text content")?;
 
-    // 写入剪切板
-    let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
-    clipboard.set_text(text).map_err(|e| e.to_string())?;
-
     // 隐藏窗口
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
     }
 
-    // 在新线程中等待焦点切换后模拟粘贴
+    // 所有剪切板和键盘操作放到后台线程
     std::thread::spawn(move || {
+        // 写入剪切板
+        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+            let _ = clipboard.set_text(text);
+        }
+
+        // 等待焦点切换
         std::thread::sleep(std::time::Duration::from_millis(300));
 
+        // 模拟 Cmd+V
         use enigo::{Enigo, Keyboard, Key, Settings, Direction};
         if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
             if cfg!(target_os = "macos") {
