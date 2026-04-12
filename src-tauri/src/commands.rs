@@ -51,17 +51,44 @@ pub fn paste_item(
 
     let text = text_to_paste.ok_or("Item not found or no text content")?;
 
-    // 写入剪切板
-    std::thread::spawn(move || {
-        if let Ok(mut clipboard) = arboard::Clipboard::new() {
-            let _ = clipboard.set_text(text);
-        }
-    });
-
-    // 隐藏窗口，焦点回到之前的应用，用户直接 Cmd+V 即可
+    // 隐藏窗口
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
     }
 
+    // 后台线程：写入剪切板 + 模拟粘贴
+    std::thread::spawn(move || {
+        // 写入剪切板
+        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+            let _ = clipboard.set_text(text);
+        }
+
+        // 等待窗口隐藏、焦点切换
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        // 用 CGEvent 模拟 Cmd+V
+        simulate_paste();
+    });
+
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn simulate_paste() {
+    use std::process::Command;
+    // 使用 osascript 模拟按键，最可靠的方式
+    let _ = Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"System Events\" to keystroke \"v\" using command down")
+        .output();
+}
+
+#[cfg(target_os = "windows")]
+fn simulate_paste() {
+    use enigo::{Enigo, Keyboard, Key, Settings, Direction};
+    if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
+        enigo.key(Key::Control, Direction::Press).ok();
+        enigo.key(Key::Unicode('v'), Direction::Click).ok();
+        enigo.key(Key::Control, Direction::Release).ok();
+    }
 }
