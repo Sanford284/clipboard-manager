@@ -17,6 +17,7 @@ const App = observer(() => {
 
   const handleItemClick = async (id: number) => {
     await clipboardStore.pasteItem(id);
+    
   };
 
   const handleDelete = async (id: number, e: React.MouseEvent) => {

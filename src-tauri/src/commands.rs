@@ -51,22 +51,20 @@ pub fn paste_item(
 
     let text = text_to_paste.ok_or("Item not found or no text content")?;
 
+    // 先同步写入剪切板（确保写入完成）
+    let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+    clipboard.set_text(text).map_err(|e| e.to_string())?;
+    drop(clipboard);
+
     // 隐藏窗口
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
     }
 
-    // 后台线程：写入剪切板 + 模拟粘贴
+    // 后台线程：等焦点切换后模拟粘贴
     std::thread::spawn(move || {
-        // 写入剪切板
-        if let Ok(mut clipboard) = arboard::Clipboard::new() {
-            let _ = clipboard.set_text(text);
-        }
-
-        // 等待窗口隐藏、焦点切换
-        std::thread::sleep(std::time::Duration::from_millis(300));
-
-        // 用 CGEvent 模拟 Cmd+V
+        // 等待窗口完全隐藏、焦点切回目标应用
+        std::thread::sleep(std::time::Duration::from_millis(500));
         simulate_paste();
     });
 
