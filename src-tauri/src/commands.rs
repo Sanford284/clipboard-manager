@@ -1,4 +1,5 @@
 use crate::storage::{models::ClipboardItem, Database};
+use crate::PreviousApp;
 use tauri::State;
 use std::sync::{Arc, Mutex};
 
@@ -35,6 +36,7 @@ pub fn toggle_pin(
 #[tauri::command]
 pub fn paste_item(
     db: State<Arc<Mutex<Database>>>,
+    previous_app: State<PreviousApp>,
     app: tauri::AppHandle,
     id: i64,
 ) -> Result<(), String> {
@@ -56,19 +58,44 @@ pub fn paste_item(
     clipboard.set_text(text).map_err(|e| e.to_string())?;
     drop(clipboard);
 
+    // 取出之前记录的前台应用名称
+    let target_app = previous_app.lock().unwrap().take();
+
     // 隐藏窗口
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
     }
 
-    // 后台线程：等焦点切换后模拟粘贴
+    // 后台线程：激活目标应用后模拟粘贴
     std::thread::spawn(move || {
-        // 等待窗口完全隐藏、焦点切回目标应用
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        // 等待窗口完全隐藏
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        // 激活之前的前台应用
+        #[cfg(target_os = "macos")]
+        if let Some(app_name) = &target_app {
+            activate_app(app_name);
+            // 等待应用激活完成
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+
         simulate_paste();
     });
 
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn activate_app(app_name: &str) {
+    use std::process::Command;
+    let script = format!(
+        "tell application \"{}\" to activate",
+        app_name.replace('\\', "\\\\").replace('"', "\\\"")
+    );
+    let _ = Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
+        .output();
 }
 
 #[cfg(target_os = "macos")]

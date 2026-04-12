@@ -8,6 +8,25 @@ use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
+/// 记录唤起剪切板窗口之前的前台应用名称，用于粘贴后恢复焦点
+pub type PreviousApp = Arc<Mutex<Option<String>>>;
+
+#[cfg(target_os = "macos")]
+fn get_frontmost_app() -> Option<String> {
+    use std::process::Command;
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"System Events\" to get name of first application process whose frontmost is true")
+        .output()
+        .ok()?;
+    if output.status.success() {
+        let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !name.is_empty() { Some(name) } else { None }
+    } else {
+        None
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app_data_dir = std::env::current_dir().unwrap().join("data");
@@ -17,9 +36,12 @@ pub fn run() {
     let db = Database::new(db_path).expect("Failed to initialize database");
     let db_state = Arc::new(Mutex::new(db));
 
+    let previous_app: PreviousApp = Arc::new(Mutex::new(None));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(db_state.clone())
+        .manage(previous_app.clone())
         .setup(move |app| {
             let app_handle = app.handle().clone();
             let db_clone = db_state.clone();
@@ -84,12 +106,20 @@ pub fn run() {
             let shortcut: tauri_plugin_global_shortcut::Shortcut = shortcut_str.parse().unwrap();
 
             let app_handle_shortcut = app.handle().clone();
+            let previous_app_shortcut = previous_app.clone();
             app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
                 if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                     if let Some(window) = app_handle_shortcut.get_webview_window("main") {
                         if window.is_visible().unwrap_or(false) {
                             window.hide().ok();
                         } else {
+                            // 记录当前前台应用，以便粘贴后恢复焦点
+                            #[cfg(target_os = "macos")]
+                            {
+                                if let Some(app_name) = get_frontmost_app() {
+                                    *previous_app_shortcut.lock().unwrap() = Some(app_name);
+                                }
+                            }
                             window.show().ok();
                             window.set_focus().ok();
                         }
