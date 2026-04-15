@@ -2,6 +2,10 @@ use crate::storage::{models::ClipboardItem, Database};
 use crate::PreviousApp;
 use tauri::State;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Shared type for the clipboard monitor paused flag
+pub type MonitorPaused = Arc<AtomicBool>;
 
 #[tauri::command]
 pub fn get_clipboard_items(
@@ -118,4 +122,95 @@ fn simulate_paste() {
         enigo.key(Key::Unicode('v'), Direction::Click).ok();
         enigo.key(Key::Control, Direction::Release).ok();
     }
+}
+
+#[tauri::command]
+pub fn get_shortcut(
+    db: State<Arc<Mutex<Database>>>,
+) -> Result<String, String> {
+    let db = db.lock().unwrap();
+    let shortcut = db.get_setting("shortcut")
+        .map_err(|e| e.to_string())?
+        .unwrap_or_else(|| {
+            if cfg!(target_os = "macos") {
+                "CommandOrControl+Shift+V".to_string()
+            } else {
+                "Control+Shift+V".to_string()
+            }
+        });
+    Ok(shortcut)
+}
+
+#[tauri::command]
+pub fn set_shortcut(
+    db: State<Arc<Mutex<Database>>>,
+    app: tauri::AppHandle,
+    shortcut: String,
+) -> Result<(), String> {
+    use tauri::Manager;
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    // Validate the new shortcut can be parsed
+    let new_shortcut = shortcut.parse::<tauri_plugin_global_shortcut::Shortcut>()
+        .map_err(|e| e.to_string())?;
+
+    // Get the old shortcut to unregister it
+    let old_shortcut_str = {
+        let db = db.lock().unwrap();
+        db.get_setting("shortcut")
+            .map_err(|e| e.to_string())?
+            .unwrap_or_else(|| {
+                if cfg!(target_os = "macos") {
+                    "CommandOrControl+Shift+V".to_string()
+                } else {
+                    "Control+Shift+V".to_string()
+                }
+            })
+    };
+
+    // Unregister old shortcut
+    if let Ok(old_shortcut) = old_shortcut_str.parse::<tauri_plugin_global_shortcut::Shortcut>() {
+        app.global_shortcut().unregister(old_shortcut).ok();
+    }
+
+    // Register new shortcut with the same handler
+    let app_handle = app.clone();
+    app.global_shortcut().on_shortcut(new_shortcut, move |_app, _shortcut, event| {
+        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+            if let Some(window) = app_handle.get_webview_window("main") {
+                if window.is_visible().unwrap_or(false) {
+                    window.hide().ok();
+                } else {
+                    #[cfg(target_os = "macos")]
+                    {
+                        if let Some(bundle_id) = crate::get_frontmost_app_bundle_id() {
+                            if let Some(prev) = app_handle.try_state::<crate::PreviousApp>() {
+                                *prev.lock().unwrap() = Some(bundle_id);
+                            }
+                        }
+                    }
+                    window.show().ok();
+                    window.set_focus().ok();
+                }
+            }
+        }
+    }).map_err(|e| e.to_string())?;
+
+    // Save to database
+    {
+        let db = db.lock().unwrap();
+        db.set_setting("shortcut", &shortcut).map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn toggle_monitoring(
+    paused: State<MonitorPaused>,
+) -> Result<bool, String> {
+    let was_paused = paused.load(Ordering::SeqCst);
+    paused.store(!was_paused, Ordering::SeqCst);
+    // Return true if monitoring is now active (not paused)
+    Ok(was_paused)
 }
