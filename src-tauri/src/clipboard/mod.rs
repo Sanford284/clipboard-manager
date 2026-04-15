@@ -5,6 +5,8 @@ pub mod windows;
 pub mod macos;
 
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClipboardContent {
@@ -17,6 +19,7 @@ pub enum ClipboardContent {
 pub trait ClipboardMonitor: Send {
     fn start(&mut self, callback: Box<dyn Fn(ClipboardContent) + Send + Sync>) -> Result<(), String>;
     fn stop(&mut self) -> Result<(), String>;
+    fn paused_flag(&self) -> Arc<AtomicBool>;
 }
 
 #[cfg(target_os = "macos")]
