@@ -219,9 +219,11 @@ pub fn run() {
                                     tauri::WebviewUrl::App("index.html?window=settings".into()),
                                 )
                                 .title("修改快捷键")
-                                .inner_size(400.0, 250.0)
+                                .inner_size(400.0, 320.0)
                                 .resizable(false)
                                 .center()
+                                .focused(true)
+                                .always_on_top(true)
                                 .build()
                                 .ok();
                             }
@@ -239,9 +241,11 @@ pub fn run() {
         .on_window_event(|window, event| {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
-                    // 关闭窗口时隐藏而不是退出
-                    window.hide().ok();
-                    api.prevent_close();
+                    // 仅对主窗口：关闭时隐藏而不是退出
+                    if window.label() == "main" {
+                        window.hide().ok();
+                        api.prevent_close();
+                    }
                 }
                 tauri::WindowEvent::Focused(false) => {
                     // 仅对主窗口：失焦时隐藏
