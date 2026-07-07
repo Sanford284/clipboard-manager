@@ -18,7 +18,6 @@ pub enum ClipboardContent {
 
 pub trait ClipboardMonitor: Send {
     fn start(&mut self, callback: Box<dyn Fn(ClipboardContent) + Send + Sync>) -> Result<(), String>;
-    fn stop(&mut self) -> Result<(), String>;
     fn paused_flag(&self) -> Arc<AtomicBool>;
 }
 

@@ -26,7 +26,13 @@ impl ClipboardMonitor for WindowsClipboardMonitor {
         let paused = Arc::clone(&self.paused);
 
         thread::spawn(move || {
-            let mut clipboard = Clipboard::new().unwrap();
+            let mut clipboard = match Clipboard::new() {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("[clipboard] failed to open clipboard: {e}");
+                    return;
+                }
+            };
             let mut last_text = String::new();
 
             while running.load(Ordering::SeqCst) {
@@ -42,11 +48,6 @@ impl ClipboardMonitor for WindowsClipboardMonitor {
             }
         });
 
-        Ok(())
-    }
-
-    fn stop(&mut self) -> Result<(), String> {
-        self.running.store(false, Ordering::SeqCst);
         Ok(())
     }
 

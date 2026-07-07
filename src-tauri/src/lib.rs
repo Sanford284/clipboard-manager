@@ -60,21 +60,25 @@ fn register_shortcut(app: &tauri::AppHandle, shortcut_str: &str, previous_app: P
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app_data_dir = std::env::current_dir().unwrap().join("data");
-    std::fs::create_dir_all(&app_data_dir).unwrap();
-    let db_path = app_data_dir.join("clipboard.db");
-
-    let db = Database::new(db_path).expect("Failed to initialize database");
-    let db_state = Arc::new(Mutex::new(db));
-
     let previous_app: PreviousApp = Arc::new(Mutex::new(None));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .manage(db_state.clone())
         .manage(previous_app.clone())
         .setup(move |app| {
             let app_handle = app.handle().clone();
+
+            // --- Database ---
+            // Use the OS app-data dir, NOT the CWD. A bundled .app launched by
+            // LaunchServices runs with CWD "/" (or the home dir), so a CWD-relative
+            // path would either crash on create_dir_all or land in an odd place.
+            let app_data_dir = app.path().app_data_dir()?;
+            std::fs::create_dir_all(&app_data_dir)?;
+            let db_path = app_data_dir.join("clipboard.db");
+            let db = Database::new(db_path)?;
+            let db_state = Arc::new(Mutex::new(db));
+            app.manage(db_state.clone());
+
             let db_clone = db_state.clone();
 
             // --- Clipboard Monitor ---
@@ -183,7 +187,7 @@ pub fn run() {
             let _tray = TrayIconBuilder::with_id("main-tray")
                 .icon(tray_icon)
                 .menu(&menu)
-                .menu_on_left_click(true)
+                .show_menu_on_left_click(true)
                 .tooltip("Clipboard Manager")
                 .on_menu_event(move |app: &tauri::AppHandle, event: tauri::menu::MenuEvent| {
                     match event.id().as_ref() {

@@ -14,22 +14,3 @@ pub struct ClipboardItem {
     pub created_at: i64,
     pub hash: String,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ContentType {
-    Text,
-    RichText,
-    Image,
-    FilePath,
-}
-
-impl ContentType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            ContentType::Text => "text",
-            ContentType::RichText => "rich_text",
-            ContentType::Image => "image",
-            ContentType::FilePath => "file_path",
-        }
-    }
-}

@@ -107,11 +107,25 @@ fn activate_app(bundle_id: &str) {
 #[cfg(target_os = "macos")]
 fn simulate_paste() {
     use std::process::Command;
-    // 使用 osascript 模拟按键，最可靠的方式
-    let _ = Command::new("osascript")
+    // 使用 osascript 模拟按键，最可靠的方式。
+    // 注意：发送按键需要"辅助功能"(Accessibility) 权限。若未授权，osascript 会静默失败——
+    // 因此这里捕获输出并在失败时打印，方便在 dev 控制台定位（无法在代码里自动授权）。
+    let output = Command::new("osascript")
         .arg("-e")
         .arg("tell application \"System Events\" to keystroke \"v\" using command down")
         .output();
+    match output {
+        Ok(out) if out.status.success() => {}
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            eprintln!(
+                "[paste] osascript exited {status}: {stderr}\n\
+                 [paste] 提示：模拟按键需要在 系统设置 → 隐私与安全性 → 辅助功能 中为本应用/终端授权。",
+                status = out.status
+            );
+        }
+        Err(e) => eprintln!("[paste] failed to spawn osascript: {e}"),
+    }
 }
 
 #[cfg(target_os = "windows")]
