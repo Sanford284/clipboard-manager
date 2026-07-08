@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Visual brainstorming companion output
+.superpowers/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
