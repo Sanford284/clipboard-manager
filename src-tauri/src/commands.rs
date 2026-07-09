@@ -76,14 +76,10 @@ pub fn paste_item(
 
     // 取出之前记录的前台应用名称
     let target_app = previous_app.lock().unwrap().take();
-    eprintln!("[paste_item] id={id} target_app={:?}", target_app);
 
     // 隐藏窗口
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
-        eprintln!("[paste_item] main window hide() called");
-    } else {
-        eprintln!("[paste_item] WARNING: main window not found");
     }
 
     // 后台线程：激活目标应用后模拟粘贴
@@ -118,20 +114,37 @@ fn activate_app(bundle_id: &str) {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn simulate_paste() {
+    use std::process::Command;
+    // 用 osascript 经 System Events 模拟 Cmd+V。发送按键需要「辅助功能」权限。
+    // 关键：osascript 是独立进程，spawn+执行需要几十毫秒——这段时间正好让
+    // activate_app 把目标 app 切到前台，避免「按键发得太早、落进错误窗口」的竞态。
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"System Events\" to keystroke \"v\" using command down")
+        .output();
+    match output {
+        Ok(out) if out.status.success() => {}
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            eprintln!(
+                "[paste] osascript exited {status}: {stderr}\n\
+                 [paste] 提示：模拟按键需要在 系统设置 → 隐私与安全性 → 辅助功能 中为本应用/终端授权。",
+                status = out.status
+            );
+        }
+        Err(e) => eprintln!("[paste] failed to spawn osascript: {e}"),
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn simulate_paste() {
     use enigo::{Enigo, Keyboard, Key, Settings, Direction};
-    // 直接在本进程用 CGEvent(macOS)/Win32(Windows) 注入按键，权限归属明确
-    // （macOS 上归属本 app，配合启动时的辅助功能授权弹窗，授权后即时生效）。
     if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
-        // macOS 用 Meta(Command)，Windows 用 Control
-        let modifier = if cfg!(target_os = "macos") {
-            Key::Meta
-        } else {
-            Key::Control
-        };
-        enigo.key(modifier, Direction::Press).ok();
+        enigo.key(Key::Control, Direction::Press).ok();
         enigo.key(Key::Unicode('v'), Direction::Click).ok();
-        enigo.key(modifier, Direction::Release).ok();
+        enigo.key(Key::Control, Direction::Release).ok();
     }
 }
 
