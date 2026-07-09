@@ -31,6 +31,48 @@ pub fn get_frontmost_app_bundle_id() -> Option<String> {
     }
 }
 
+/// 当前前台应用的本地化名称（用于显示来源）；取不到返回 None
+#[cfg(target_os = "macos")]
+pub fn get_frontmost_app_name() -> Option<String> {
+    use cocoa::foundation::NSString;
+    use objc::{class, msg_send, sel, sel_impl, runtime::Object};
+    use std::ffi::CStr;
+    unsafe {
+        let workspace: *mut Object = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let app: *mut Object = msg_send![workspace, frontmostApplication];
+        if app.is_null() { return None; }
+        let name: *mut Object = msg_send![app, localizedName];
+        if name.is_null() { return None; }
+        let cstr = CStr::from_ptr(name.UTF8String());
+        Some(cstr.to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_frontmost_app_name() -> Option<String> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    unsafe {
+        let hwnd = GetForegroundWindow().ok()?;
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut buf = [0u16; 520];
+        let mut len = buf.len() as u32;
+        let pwstr = windows::core::PWSTR(buf.as_mut_ptr());
+        QueryFullProcessImageNameW(handle, windows::Win32::System::Threading::PROCESS_NAME_FLAGS(0), pwstr, &mut len).ok()?;
+        let _ = CloseHandle(handle);
+        let path = String::from_utf16_lossy(&buf[..len as usize]);
+        std::path::Path::new(&path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_string())
+    }
+}
+
 fn register_shortcut(app: &tauri::AppHandle, shortcut_str: &str, previous_app: PreviousApp) -> Result<(), String> {
     let shortcut: tauri_plugin_global_shortcut::Shortcut = shortcut_str.parse()
         .map_err(|e: <tauri_plugin_global_shortcut::Shortcut as std::str::FromStr>::Err| e.to_string())?;
@@ -95,6 +137,8 @@ pub fn run() {
             monitor.start(Box::new(move |content| {
                 let db = db_clone.lock().unwrap();
 
+                let app_source = get_frontmost_app_name();
+
                 let item = match content {
                     ClipboardContent::Text(text) => {
                         let preview = if text.len() > 200 {
@@ -112,7 +156,7 @@ pub fn run() {
                             thumb_content: None,
                             file_path: None,
                             preview,
-                            app_source: None,
+                            app_source,
                             pinned: false,
                             created_at: chrono::Utc::now().timestamp_millis(),
                             hash: Database::compute_hash(&text),
