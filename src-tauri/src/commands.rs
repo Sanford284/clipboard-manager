@@ -1,6 +1,7 @@
 use crate::storage::{models::ClipboardItem, Database};
 use crate::PreviousApp;
 use tauri::State;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -227,4 +228,55 @@ pub fn toggle_monitoring(
     paused.store(!was_paused, Ordering::SeqCst);
     // Return true if monitoring is now active (not paused)
     Ok(was_paused)
+}
+
+#[tauri::command]
+pub fn get_settings(
+    db: State<Arc<Mutex<Database>>>,
+) -> Result<HashMap<String, String>, String> {
+    let db = db.lock().unwrap();
+    let keys = [
+        "theme", "window_width", "window_height", "show_source",
+        "history_mode", "history_limit", "autostart", "shortcut",
+    ];
+    let mut map = HashMap::new();
+    for k in keys {
+        if let Ok(Some(v)) = db.get_setting(k) {
+            map.insert((*k).to_string(), v);
+        }
+    }
+    Ok(map)
+}
+
+#[tauri::command]
+pub fn set_setting(
+    db: State<Arc<Mutex<Database>>>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.set_setting(&key, &value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn clear_history(
+    db: State<Arc<Mutex<Database>>>,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.clear_history().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_autostart(
+    app: tauri::AppHandle,
+    enabled: bool,
+) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let al = app.autolaunch();
+    if enabled {
+        al.enable().map_err(|e| e.to_string())?;
+    } else {
+        al.disable().map_err(|e| e.to_string())?;
+    }
+    Ok(enabled)
 }

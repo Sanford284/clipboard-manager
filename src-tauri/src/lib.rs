@@ -64,6 +64,10 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(previous_app.clone())
         .setup(move |app| {
             let app_handle = app.handle().clone();
@@ -270,6 +274,10 @@ pub fn run() {
             commands::get_shortcut,
             commands::set_shortcut,
             commands::toggle_monitoring,
+            commands::get_settings,
+            commands::set_setting,
+            commands::clear_history,
+            commands::set_autostart,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
