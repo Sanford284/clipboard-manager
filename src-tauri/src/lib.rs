@@ -256,6 +256,23 @@ pub fn run() {
             // --- Register global shortcut ---
             register_shortcut(app.handle(), &shortcut_str, previous_app.clone())?;
 
+            // --- Apply default window size from settings (window is created once at startup) ---
+            if let Some(window) = app.get_webview_window("main") {
+                let db = db_for_shortcut.lock().unwrap();
+                let w = db
+                    .get_setting("window_width").ok().flatten()
+                    .and_then(|s| s.parse::<f64>().ok())
+                    .unwrap_or(800.0)
+                    .clamp(320.0, 1200.0);
+                let h = db
+                    .get_setting("window_height").ok().flatten()
+                    .and_then(|s| s.parse::<f64>().ok())
+                    .unwrap_or(600.0)
+                    .clamp(400.0, 1400.0);
+                drop(db);
+                let _ = window.set_size(tauri::LogicalSize::new(w, h));
+            }
+
             // --- System Tray ---
             let monitoring_item = CheckMenuItemBuilder::with_id("monitoring", "剪贴板监听")
                 .checked(true)
@@ -264,7 +281,7 @@ pub fn run() {
             let open_item = MenuItemBuilder::with_id("open", format!("打开剪贴板  ({})", shortcut_str))
                 .build(app)?;
 
-            let shortcut_item = MenuItemBuilder::with_id("shortcut_settings", "修改快捷键...")
+            let shortcut_item = MenuItemBuilder::with_id("shortcut_settings", "设置...")
                 .build(app)?;
 
             let separator = PredefinedMenuItem::separator(app)?;
@@ -323,9 +340,9 @@ pub fn run() {
                                     "settings",
                                     tauri::WebviewUrl::App("index.html?window=settings".into()),
                                 )
-                                .title("修改快捷键")
-                                .inner_size(400.0, 320.0)
-                                .resizable(false)
+                                .title("设置")
+                                .inner_size(560.0, 640.0)
+                                .resizable(true)
                                 .center()
                                 .focused(true)
                                 .always_on_top(true)
