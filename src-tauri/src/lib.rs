@@ -15,6 +15,27 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 /// 记录唤起剪切板窗口之前的前台应用 bundle id，用于粘贴后恢复焦点
 pub type PreviousApp = Arc<Mutex<Option<String>>>;
 
+/// 弹出 macOS「辅助功能」授权对话框（模拟 Cmd+V 粘贴需要该权限）。
+/// 用 AXIsProcessTrustedWithOptions(prompt=true)：系统弹原生对话框并把本进程加入
+/// 「辅助功能」列表；用户授权后即时生效，无需重启。
+#[cfg(target_os = "macos")]
+fn prompt_accessibility_permission() {
+    use core_foundation::base::TCFType;
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::string::CFString;
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrustedWithOptions(options: core_foundation::base::CFTypeRef) -> u8;
+    }
+    unsafe {
+        let key = CFString::new("AXTrustedCheckOptionPrompt");
+        let val = CFBoolean::true_value();
+        let opts = CFDictionary::from_CFType_pairs(&[(key.as_CFType(), val.as_CFType())]);
+        let _trusted = AXIsProcessTrustedWithOptions(opts.as_CFTypeRef()) != 0;
+    }
+}
+
 #[cfg(target_os = "macos")]
 pub fn get_frontmost_app_bundle_id() -> Option<String> {
     use cocoa::foundation::NSString;
@@ -132,6 +153,10 @@ pub fn run() {
         .manage(previous_app.clone())
         .setup(move |app| {
             let app_handle = app.handle().clone();
+
+            // --- macOS: 触发「辅助功能」授权弹窗（模拟 Cmd+V 粘贴所需）---
+            #[cfg(target_os = "macos")]
+            prompt_accessibility_permission();
 
             // --- Database ---
             // Use the OS app-data dir, NOT the CWD. A bundled .app launched by
