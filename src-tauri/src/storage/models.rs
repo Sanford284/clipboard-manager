@@ -7,6 +7,7 @@ pub struct ClipboardItem {
     pub text_content: Option<String>,
     pub html_content: Option<String>,
     pub blob_content: Option<Vec<u8>>,
+    pub thumb_content: Option<Vec<u8>>,
     pub file_path: Option<String>,
     pub preview: String,
     pub app_source: Option<String>,

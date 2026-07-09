@@ -529,6 +529,7 @@ dependencies = [
  "chrono",
  "cocoa",
  "enigo",
+ "image",
  "objc",
  "rusqlite",
  "serde",
@@ -2024,6 +2025,8 @@ dependencies = [
  "num-traits",
  "png 0.18.1",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
