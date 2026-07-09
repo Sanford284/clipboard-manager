@@ -87,6 +87,14 @@ pub fn paste_item(
         #[cfg(target_os = "macos")]
         if let Some(app_name) = &target_app {
             activate_app(app_name);
+            // macOS 激活是异步的：轮询前台 app 直到目标真正切到前台（最多 ~500ms），
+            // 否则按键会发得太早、落进错误窗口。
+            for _ in 0..50 {
+                if crate::get_frontmost_app_bundle_id().as_deref() == Some(app_name.as_str()) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
         }
         simulate_paste();
     });
@@ -114,37 +122,20 @@ fn activate_app(bundle_id: &str) {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn simulate_paste() {
-    use std::process::Command;
-    // 用 osascript 经 System Events 模拟 Cmd+V。发送按键需要「辅助功能」权限。
-    // 关键：osascript 是独立进程，spawn+执行需要几十毫秒——这段时间正好让
-    // activate_app 把目标 app 切到前台，避免「按键发得太早、落进错误窗口」的竞态。
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg("tell application \"System Events\" to keystroke \"v\" using command down")
-        .output();
-    match output {
-        Ok(out) if out.status.success() => {}
-        Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            eprintln!(
-                "[paste] osascript exited {status}: {stderr}\n\
-                 [paste] 提示：模拟按键需要在 系统设置 → 隐私与安全性 → 辅助功能 中为本应用/终端授权。",
-                status = out.status
-            );
-        }
-        Err(e) => eprintln!("[paste] failed to spawn osascript: {e}"),
-    }
-}
-
-#[cfg(target_os = "windows")]
 fn simulate_paste() {
     use enigo::{Enigo, Keyboard, Key, Settings, Direction};
+    // 直接在本进程用 CGEvent(macOS)/Win32(Windows) 注入 Cmd+V / Ctrl+V。
+    // macOS 上权限归属本 app（已通过启动时的辅助功能授权弹窗授予），比 osascript
+    // 子进程的权限归属（终端/VSCode）更可靠。
     if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
-        enigo.key(Key::Control, Direction::Press).ok();
+        let modifier = if cfg!(target_os = "macos") {
+            Key::Meta
+        } else {
+            Key::Control
+        };
+        enigo.key(modifier, Direction::Press).ok();
         enigo.key(Key::Unicode('v'), Direction::Click).ok();
-        enigo.key(Key::Control, Direction::Release).ok();
+        enigo.key(modifier, Direction::Release).ok();
     }
 }
 
