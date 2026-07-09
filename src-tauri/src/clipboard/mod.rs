@@ -4,15 +4,22 @@ pub mod windows;
 #[cfg(target_os = "macos")]
 pub mod macos;
 
-use serde::{Deserialize, Serialize};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Owned RGBA image (decoupled from arboard's borrowed ImageData lifetime).
+#[derive(Debug, Clone)]
+pub struct ClipboardImage {
+    pub width: usize,
+    pub height: usize,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
 pub enum ClipboardContent {
     Text(String),
     RichText { plain: String, html: String },
-    Image(Vec<u8>),
+    Image(ClipboardImage),
     FilePath(String),
 }
 

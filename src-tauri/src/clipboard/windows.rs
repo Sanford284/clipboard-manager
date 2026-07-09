@@ -1,4 +1,4 @@
-use super::{ClipboardContent, ClipboardMonitor};
+use super::{ClipboardContent, ClipboardImage, ClipboardMonitor};
 use arboard::Clipboard;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -33,14 +33,36 @@ impl ClipboardMonitor for WindowsClipboardMonitor {
                     return;
                 }
             };
-            let mut last_text = String::new();
+            let mut last_text = clipboard.get_text().unwrap_or_default();
+            let mut last_image: Vec<u8> = Vec::new();
 
             while running.load(Ordering::SeqCst) {
                 if !paused.load(Ordering::SeqCst) {
-                    if let Ok(text) = clipboard.get_text() {
-                        if text != last_text {
-                            last_text = text.clone();
-                            callback(ClipboardContent::Text(text));
+                    let emitted_image = if let Ok(img) = clipboard.get_image() {
+                        let sig = image_signature(&img);
+                        if sig != last_image {
+                            last_image = sig;
+                            last_text.clear();
+                            callback(ClipboardContent::Image(ClipboardImage {
+                                width: img.width,
+                                height: img.height,
+                                bytes: img.bytes.to_vec(),
+                            }));
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+
+                    if !emitted_image {
+                        if let Ok(text) = clipboard.get_text() {
+                            if !text.is_empty() && text != last_text {
+                                last_text = text.clone();
+                                last_image.clear();
+                                callback(ClipboardContent::Text(text));
+                            }
                         }
                     }
                 }
@@ -54,4 +76,14 @@ impl ClipboardMonitor for WindowsClipboardMonitor {
     fn paused_flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.paused)
     }
+}
+
+/// 轻量指纹（宽高 + 前 64 字节），避免逐字节比较大图
+fn image_signature(img: &arboard::ImageData) -> Vec<u8> {
+    let take = img.bytes.len().min(64);
+    let mut sig = Vec::with_capacity(72);
+    sig.extend_from_slice(&(img.width as u64).to_le_bytes());
+    sig.extend_from_slice(&(img.height as u64).to_le_bytes());
+    sig.extend_from_slice(&img.bytes[..take]);
+    sig
 }

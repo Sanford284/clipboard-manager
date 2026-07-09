@@ -73,6 +73,25 @@ pub fn get_frontmost_app_name() -> Option<String> {
     }
 }
 
+/// 单张图片上限（编码后 PNG 字节）。超过则跳过，防止 DB 膨胀。
+const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
+
+/// 由 RGBA 原图生成最大边 256px 的 JPEG 缩略图字节
+fn make_thumbnail(rgba: &image::RgbaImage) -> Vec<u8> {
+    let (w, h) = rgba.dimensions();
+    let max_edge = 256u32;
+    let (nw, nh) = if w >= h {
+        (max_edge, ((h as f32) * (max_edge as f32) / (w as f32)) as u32)
+    } else {
+        (((w as f32) * (max_edge as f32) / (h as f32)) as u32, max_edge)
+    };
+    let thumb = image::imageops::resize(rgba, nw.max(1), nh.max(1), image::imageops::FilterType::Lanczos3);
+    let rgb = image::DynamicImage::ImageRgba8(thumb).to_rgb8();
+    let mut buf = std::io::Cursor::new(Vec::new());
+    let _ = image::DynamicImage::ImageRgb8(rgb).write_to(&mut buf, image::ImageFormat::Jpeg);
+    buf.into_inner()
+}
+
 fn register_shortcut(app: &tauri::AppHandle, shortcut_str: &str, previous_app: PreviousApp) -> Result<(), String> {
     let shortcut: tauri_plugin_global_shortcut::Shortcut = shortcut_str.parse()
         .map_err(|e: <tauri_plugin_global_shortcut::Shortcut as std::str::FromStr>::Err| e.to_string())?;
@@ -162,20 +181,42 @@ pub fn run() {
                             hash: Database::compute_hash(&text),
                         }
                     }
-                    ClipboardContent::Image(data) => {
+                    ClipboardContent::Image(img) => {
+                        // 由原始 RGBA 构图
+                        let rgba = match image::RgbaImage::from_raw(
+                            img.width as u32, img.height as u32, img.bytes,
+                        ) {
+                            Some(r) => r,
+                            None => return,
+                        };
+                        // 编码 PNG 作为原图
+                        let mut png_buf = std::io::Cursor::new(Vec::new());
+                        if image::DynamicImage::ImageRgba8(rgba.clone())
+                            .write_to(&mut png_buf, image::ImageFormat::Png)
+                            .is_err()
+                        {
+                            return;
+                        }
+                        let png_bytes = png_buf.into_inner();
+                        if png_bytes.len() > MAX_IMAGE_BYTES {
+                            return; // 超限跳过
+                        }
+                        let thumb = make_thumbnail(&rgba);
+                        let preview = format!("图片 {}×{}", img.width, img.height);
+
                         ClipboardItem {
                             id: 0,
                             content_type: "image".to_string(),
                             text_content: None,
                             html_content: None,
-                            blob_content: Some(data.clone()),
-                            thumb_content: None,
+                            blob_content: Some(png_bytes.clone()),
+                            thumb_content: Some(thumb),
                             file_path: None,
-                            preview: "[Image]".to_string(),
-                            app_source: None,
+                            preview,
+                            app_source,
                             pinned: false,
                             created_at: chrono::Utc::now().timestamp_millis(),
-                            hash: Database::compute_hash(&format!("{:?}", data)),
+                            hash: Database::compute_hash_bytes(&png_bytes),
                         }
                     }
                     _ => return,
@@ -183,6 +224,16 @@ pub fn run() {
 
                 if let Ok(id) = db.insert_item(&item) {
                     app_handle.emit("clipboard-changed", id).ok();
+                }
+
+                // 自动清理历史（仅 history_mode=auto）
+                let mode = db.get_setting("history_mode").ok().flatten().unwrap_or_else(|| "never".into());
+                if mode == "auto" {
+                    let limit: u32 = db
+                        .get_setting("history_limit").ok().flatten()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(500);
+                    let _ = db.enforce_history_limit(limit);
                 }
             })).ok();
 
