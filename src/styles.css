@@ -1,1 +1,54 @@
 @import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-hover: #f7f8fa;
+  --surface-active: #eef4ff;
+  --text: #1f2937;
+  --muted: #9ca3af;
+  --border: #eceef1;
+  --accent: #3b82f6;
+  --accent-soft: #eff6ff;
+}
+
+.dark {
+  --bg: #1a1b1e;
+  --surface: #24262b;
+  --surface-hover: #2c2f35;
+  --surface-active: #1e2a44;
+  --text: #e5e7eb;
+  --muted: #7b8088;
+  --border: #33363c;
+  --accent: #3b82f6;
+  --accent-soft: #1e2a44;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
