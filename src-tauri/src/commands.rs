@@ -260,19 +260,33 @@ pub fn get_settings(
 #[tauri::command]
 pub fn set_setting(
     db: State<Arc<Mutex<Database>>>,
+    app: tauri::AppHandle,
     key: String,
     value: String,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
-    db.set_setting(&key, &value).map_err(|e| e.to_string())
+    use tauri::Emitter;
+    {
+        let db = db.lock().unwrap();
+        db.set_setting(&key, &value).map_err(|e| e.to_string())?;
+    }
+    // 通知所有 webview 重新加载设置（主窗口据此即时切换主题等）
+    let _ = app.emit("settings-changed", ());
+    Ok(())
 }
 
 #[tauri::command]
 pub fn clear_history(
     db: State<Arc<Mutex<Database>>>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
-    let db = db.lock().unwrap();
-    db.clear_history().map_err(|e| e.to_string())
+    use tauri::Emitter;
+    {
+        let db = db.lock().unwrap();
+        db.clear_history().map_err(|e| e.to_string())?;
+    }
+    // 通知主窗口刷新列表
+    let _ = app.emit("clipboard-changed", ());
+    Ok(())
 }
 
 #[tauri::command]

@@ -42,7 +42,6 @@ impl ClipboardMonitor for MacOSClipboardMonitor {
                         let sig = image_signature(&img);
                         if sig != last_image {
                             last_image = sig;
-                            last_text.clear();
                             callback(ClipboardContent::Image(ClipboardImage {
                                 width: img.width,
                                 height: img.height,
@@ -60,7 +59,6 @@ impl ClipboardMonitor for MacOSClipboardMonitor {
                         if let Ok(text) = clipboard.get_text() {
                             if !text.is_empty() && text != last_text {
                                 last_text = text.clone();
-                                last_image.clear();
                                 callback(ClipboardContent::Text(text));
                             }
                         }

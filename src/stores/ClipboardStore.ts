@@ -56,6 +56,9 @@ class ClipboardStore {
     listen('clipboard-changed', () => {
       this.loadItems();
     });
+    listen('settings-changed', () => {
+      this.loadSettings();
+    });
   }
 
   get filteredItems(): ClipboardItem[] {

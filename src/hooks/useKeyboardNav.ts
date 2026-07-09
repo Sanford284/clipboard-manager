@@ -28,8 +28,10 @@ export function useKeyboardNav({ focusSearch }: Options) {
         return;
       }
 
-      // 数字 1-9：快速粘贴第 N 条（无修饰键）
-      if (!mod && /^[1-9]$/.test(e.key)) {
+      // 数字 1-9：快速粘贴第 N 条（无修饰键；搜索框聚焦时不拦截，允许输入数字）
+      const ae = document.activeElement;
+      const typing = ae instanceof HTMLInputElement || ae instanceof HTMLTextAreaElement;
+      if (!mod && !typing && /^[1-9]$/.test(e.key)) {
         const n = parseInt(e.key, 10);
         const item = clipboardStore.itemAt(n);
         if (item) {

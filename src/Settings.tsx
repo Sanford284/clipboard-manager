@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { applyTheme } from './lib/theme';
 
 const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta']);
 
@@ -29,6 +30,10 @@ export default function Settings() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    applyTheme((settings.theme ?? 'light') as 'light' | 'dark');
+  }, [settings.theme]);
 
   const save = (key: string, value: string) => {
     setSettings((p) => ({ ...p, [key]: value }));
