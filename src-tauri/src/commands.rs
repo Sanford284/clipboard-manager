@@ -47,20 +47,31 @@ pub fn paste_item(
 ) -> Result<(), String> {
     use tauri::Manager;
 
-    // 先从数据库取出内容，尽快释放锁
-    let text_to_paste = {
+    // 按 id 取条目（含 blob_content），尽快释放锁
+    let item = {
         let db = db.lock().unwrap();
-        let items = db.get_items(1000, 0, None, None).map_err(|e| e.to_string())?;
-        items.into_iter()
-            .find(|i| i.id == id)
-            .and_then(|item| item.text_content)
+        db.get_item_by_id(id).map_err(|e| e.to_string())?
+            .ok_or("Item not found")?
     };
 
-    let text = text_to_paste.ok_or("Item not found or no text content")?;
-
-    // 先同步写入剪切板（确保写入完成）
+    // 写入剪切板：图片走 set_image，其余走 set_text
     let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
-    clipboard.set_text(text).map_err(|e| e.to_string())?;
+    if item.content_type == "image" {
+        if let Some(blob) = item.blob_content.as_ref() {
+            let img = image::load_from_memory(blob).map_err(|e| e.to_string())?.to_rgba8();
+            let data = arboard::ImageData {
+                width: img.width() as usize,
+                height: img.height() as usize,
+                bytes: img.into_raw().into(),
+            };
+            clipboard.set_image(data).map_err(|e| e.to_string())?;
+        } else {
+            return Err("Image item has no blob".into());
+        }
+    } else {
+        let text = item.text_content.unwrap_or_default();
+        clipboard.set_text(text).map_err(|e| e.to_string())?;
+    }
     drop(clipboard);
 
     // 取出之前记录的前台应用名称
@@ -73,12 +84,10 @@ pub fn paste_item(
 
     // 后台线程：激活目标应用后模拟粘贴
     std::thread::spawn(move || {
-        // 激活之前的前台应用（osascript 是同步阻塞的，返回即表示激活完成）
         #[cfg(target_os = "macos")]
         if let Some(app_name) = &target_app {
             activate_app(app_name);
         }
-
         simulate_paste();
     });
 
