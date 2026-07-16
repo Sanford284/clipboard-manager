@@ -1,6 +1,6 @@
 [package]
 name = "clipboard-manager"
-version = "0.2.1"
+version = "0.3.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -44,4 +44,5 @@ windows = { version = "0.52", features = [
 cocoa = "0.25"
 objc = "0.2"
 core-foundation = "0.9"
+core-graphics = "0.23"
 

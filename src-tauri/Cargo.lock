@@ -534,11 +534,13 @@ dependencies = [
 
 [[package]]
 name = "clipboard-manager"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "arboard",
  "chrono",
  "cocoa",
+ "core-foundation 0.9.4",
+ "core-graphics 0.23.2",
  "enigo",
  "image",
  "objc",

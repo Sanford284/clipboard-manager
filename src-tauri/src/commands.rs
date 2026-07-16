@@ -85,10 +85,27 @@ pub fn paste_item(
     // 后台线程：激活目标应用后模拟粘贴
     std::thread::spawn(move || {
         #[cfg(target_os = "macos")]
-        if let Some(app_name) = &target_app {
-            activate_app(app_name);
+        {
+            if let Some(app_name) = &target_app {
+                activate_app(app_name);
+                // macOS 激活是异步的：轮询前台 app 直到目标真正切到前台（最多 ~500ms），
+                // 否则按键会发得太早、落进错误窗口。
+                for _ in 0..50 {
+                    if crate::get_frontmost_app_bundle_id().as_deref() == Some(app_name.as_str()) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+            }
+            if let Err(e) = simulate_paste() {
+                eprintln!("[paste] simulate_paste failed: {e}");
+            }
         }
-        simulate_paste();
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = target_app;
+            simulate_paste();
+        }
     });
 
     Ok(())
@@ -115,27 +132,29 @@ fn activate_app(bundle_id: &str) {
 }
 
 #[cfg(target_os = "macos")]
-fn simulate_paste() {
-    use std::process::Command;
-    // 用 osascript 经 System Events 模拟 Cmd+V。发送按键需要「辅助功能」权限。
-    // 注意：dev 模式下权限归属是「负责进程」——未签名的 dev 二进制由 VSCode/终端
-    // 拉起，所以 macOS 把按键算在 VSCode 头上，需要给 VSCode 授权（而非本 app）。
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg("tell application \"System Events\" to keystroke \"v\" using command down")
-        .output();
-    match output {
-        Ok(out) if out.status.success() => {}
-        Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            eprintln!(
-                "[paste] osascript exited {status}: {stderr}\n\
-                 [paste] 提示：dev 模式下需给 VSCode（或终端）授权辅助功能；正式 .app 则给本 app。",
-                status = out.status
-            );
-        }
-        Err(e) => eprintln!("[paste] failed to spawn osascript: {e}"),
+fn simulate_paste() -> Result<(), String> {
+    use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+    use std::thread;
+    use std::time::Duration;
+    // 直接用 CGEvent 注入 Cmd+V，并把 Command flag 显式设到 V 按键事件上：
+    // - 权限归属本 app（已授予「辅助功能」），不依赖 osascript→System Events 的 Automation 权限；
+    // - 原始 keycode 9（kVK_ANSI_V），不查键盘布局，避开 TISCopyCurrentKeyboardInputSource
+    //   的主线程断言（后台线程调用会 dispatch_assert_queue_fail 直接 abort 整个进程）；
+    // - 显式带 Command flag：enigo「先按 Meta 再按 V」时，V 事件本身的 modifierFlags=0，
+    //   VSCode/Electron 读的是事件自带 flag → 只看到裸 v、不触发粘贴。这里把 flag 直接
+    //   设到 V 事件上（down 与 up 都设），app 才会识别为 Cmd+V。
+    let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
+        .map_err(|_| "failed creating CGEventSource".to_string())?;
+    let cmd = CGEventFlags::CGEventFlagCommand;
+    for &down in &[true, false] {
+        let event = CGEvent::new_keyboard_event(source.clone(), 9, down)
+            .map_err(|_| "failed creating key event".to_string())?;
+        event.set_flags(cmd);
+        event.post(CGEventTapLocation::HID);
+        thread::sleep(Duration::from_millis(5));
     }
+    Ok(())
 }
 
 #[cfg(target_os = "windows")]
